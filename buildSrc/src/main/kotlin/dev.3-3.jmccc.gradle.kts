@@ -1,7 +1,6 @@
 plugins {
     `java-library`
     `maven-publish`
-    signing
 }
 
 dependencies {
@@ -108,9 +107,16 @@ publishing {
                 }
             }
         }
-    }
-}
 
-signing {
-    sign(publishing.publications["mavenJava"])
+        repositories {
+            maven {
+                name = "maven"
+                url = uri("https://maven.cafeteria.dev/releases")
+                credentials {
+                    username = System.getenv("MAVEN_USERNAME")
+                    password = System.getenv("MAVEN_PASSWORD")
+                }
+            }
+        }
+    }
 }
