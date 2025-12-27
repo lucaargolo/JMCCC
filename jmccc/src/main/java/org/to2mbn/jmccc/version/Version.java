@@ -15,6 +15,7 @@ public class Version implements Serializable {
     private final String assets;
     private final List<String> gameArgs;
     private final List<String> jvmArgs;
+    private final JavaVersionInfo javaVersionInfo;
     private final String root;
     private final Set<Library> libraries;
     private final boolean legacy;
@@ -29,22 +30,24 @@ public class Version implements Serializable {
      * @param mainClass              the main class
      * @param assets                 the assets index name
      * @param gameArgs               the launch arguments
+     * @param jvmArgs                the jvm arguments
+     * @param javaVersionInfo        the java version info, can be null
      * @param root                   the root of the version hierarchy
      * @param libraries              the libraries to add to classpath
-     * @param legacy                 true if this version is lower than 1.7.10, as well as using
-     *                               the legacy assets index
+     * @param legacy                 true if this version is lower than 1.7.10, as well as using the legacy assets index
      * @param assetIndexDownloadInfo the asset download info, can be null
      * @param downloads              the download infos
      * @throws NullPointerException if any of the arguments (except type,
      *                              assetIndexDownloadInfo) is null
      */
-    public Version(String version, String type, String mainClass, String assets, List<String> gameArgs, List<String> jvmArgs, String root, Set<Library> libraries, boolean legacy, AssetIndexInfo assetIndexDownloadInfo, Map<String, DownloadInfo> downloads) {
+    public Version(String version, String type, String mainClass, String assets, List<String> gameArgs, List<String> jvmArgs, JavaVersionInfo javaVersionInfo, String root, Set<Library> libraries, boolean legacy, AssetIndexInfo assetIndexDownloadInfo, Map<String, DownloadInfo> downloads) {
         this.version = Objects.requireNonNull(version);
         this.type = type;
         this.mainClass = Objects.requireNonNull(mainClass);
         this.assets = Objects.requireNonNull(assets);
         this.gameArgs = Objects.requireNonNull(gameArgs);
         this.jvmArgs = Objects.requireNonNull(jvmArgs);
+        this.javaVersionInfo = javaVersionInfo;
         this.root = Objects.requireNonNull(root);
         this.libraries = Objects.requireNonNull(libraries);
         this.legacy = legacy;
@@ -110,6 +113,14 @@ public class Version implements Serializable {
         return jvmArgs;
     }
 
+    /**
+     * Gets the java version.
+     *
+     * @return the java version
+     */
+    public JavaVersionInfo getJavaVersion() {
+        return javaVersionInfo;
+    }
 
     /**
      * Gets the root of the version hierarchy.
@@ -193,6 +204,8 @@ public class Version implements Serializable {
                     && Objects.equals(mainClass, another.mainClass)
                     && Objects.equals(assets, another.assets)
                     && Objects.equals(gameArgs, another.gameArgs)
+                    && Objects.equals(jvmArgs, another.jvmArgs)
+                    && Objects.equals(javaVersionInfo, another.javaVersionInfo)
                     && Objects.equals(root, another.root)
                     && Objects.equals(libraries, another.libraries)
                     && legacy == another.legacy

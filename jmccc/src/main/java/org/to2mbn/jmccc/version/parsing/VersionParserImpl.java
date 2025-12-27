@@ -21,6 +21,15 @@ class VersionParserImpl implements VersionParser {
     }
 
     @Override
+    public JavaVersionInfo parseJavaVersionInfo(JSONObject json) throws JSONException {
+        if (json == null) return null;
+
+        String component = json.optString("component", null);
+        int majorVersion = json.optInt("majorVersion", -1);
+        return new JavaVersionInfo(component, majorVersion);
+    }
+
+    @Override
     public AssetIndexInfo parseAssetIndexInfo(JSONObject json) throws JSONException {
         if (json == null) return null;
 
@@ -115,6 +124,7 @@ class VersionParserImpl implements VersionParser {
         String launchArgs = null;//Old Minecraft Arguments
         Deque<List<String>> gameArgsDeque = new ArrayDeque<>();//New Minecraft Arguments
         Deque<List<String>> jvmArgsDeque = new ArrayDeque<>();
+        JavaVersionInfo javaVersionInfo = null;
         String type = null;
         Map<String, Library> librariesMap = new TreeMap<>();
         Map<String, DownloadInfo> downloads = new TreeMap<>();
@@ -132,6 +142,10 @@ class VersionParserImpl implements VersionParser {
             JSONObject arguments = json.optJSONObject("arguments");
             gameArgsDeque.addLast(parseArguments(arguments, "game", platformDescription));
             jvmArgsDeque.addLast(parseArguments(arguments, "jvm", platformDescription));
+
+            JSONObject jsonJavaVersionInfo = json.optJSONObject("javaVersion");
+            if (jsonJavaVersionInfo != null)
+                javaVersionInfo = parseJavaVersionInfo(jsonJavaVersionInfo);
 
             Set<Library> currentLibraries = parseLibraries(json.optJSONArray("libraries"), platformDescription);
             if (currentLibraries != null) {
@@ -175,6 +189,7 @@ class VersionParserImpl implements VersionParser {
                 assets,
                 gameArgs,
                 jvmArgs,
+                javaVersionInfo,
                 root,
                 Collections.unmodifiableSet(libraries),
                 assets.equals("legacy"),

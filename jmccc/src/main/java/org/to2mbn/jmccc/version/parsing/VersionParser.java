@@ -28,6 +28,22 @@ public interface VersionParser {
     DownloadInfo parseDownloadInfo(JSONObject json) throws JSONException;
 
     /**
+     * Parses the JavaVersionInfo.
+     *
+     * <pre>
+     * {
+     * 	"component": "[string]",
+     * 	"majorVersion": "[number]",
+     * }
+     * </pre>
+     *
+     * @param json the json
+     * @return the parsed JavaVersionInfo
+     * @throws JSONException if the json is invalid
+     */
+     JavaVersionInfo parseJavaVersionInfo(JSONObject json) throws JSONException;
+
+    /**
      * Parses the AssetIndexInfo.
      * <p>
      * Extends from {@link #parseDownloadInfo(JSONObject)}.
