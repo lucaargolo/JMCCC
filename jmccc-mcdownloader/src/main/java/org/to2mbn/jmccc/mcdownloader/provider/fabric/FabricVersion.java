@@ -14,7 +14,7 @@ public class FabricVersion {
         this.loaderName = loaderName;
     }
 
-    private static final Pattern PATTERN = Pattern.compile("^([\\w.\\-]+)-loader-([\\w.\\-]+)-([\\w.\\-]+)$");
+    private static final Pattern PATTERN = Pattern.compile("^([^-]+)-loader-([^-]+)-(.+)$");
 
     public static FabricVersion resolve(String loaderName, String version) {
         Matcher m = PATTERN.matcher(version);
