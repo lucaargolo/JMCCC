@@ -50,8 +50,8 @@ public class ForgeInstallerTweaker {
 
         @Override
         public void visitMethodInsn(int opcode, String owner, String name, String descriptor, boolean isInterface) {
-            // Remove System.exit
-            if (opcode == Opcodes.INVOKESTATIC && name.equals("exit")) {
+            // Remove System.exit and launchGui
+            if (opcode == Opcodes.INVOKESTATIC && (name.equals("exit") || name.equals("launchGui"))) {
                 super.visitInsn(Opcodes.POP);
                 return;
             }
