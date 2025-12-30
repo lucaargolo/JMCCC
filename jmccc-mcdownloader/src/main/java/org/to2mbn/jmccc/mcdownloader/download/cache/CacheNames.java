@@ -19,6 +19,8 @@ public final class CacheNames {
     // Forge caches
     public static final String FORGE_VERSION_META = PREFIX_DYNAMIC + "forge.versionMeta";
     public static final String FORGE_VERSION_PROMO = PREFIX_DYNAMIC + "forge.versionPromo";
+    // NeoForge caches
+    public static final String NEOFORGE_VERSION_META = PREFIX_DYNAMIC + "neoforge.versionMeta";
     // Liteloader caches
     public static final String LITELOADER_VERSION_LIST = PREFIX_DYNAMIC + "liteloader.versionList";
     public static final String LITELOADER_VERSION_JSON = PREFIX_DYNAMIC + "liteloader.versionJson";

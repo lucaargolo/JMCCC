@@ -20,17 +20,19 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
-class InstallProfileProcessor implements ResultProcessor<byte[], String> {
+public class InstallProfileProcessor implements ResultProcessor<byte[], String> {
 
-    private MinecraftDirectory mcdir;
+    private final MinecraftDirectory mcdir;
+    private final String installerArtifact;
 
-    public InstallProfileProcessor(MinecraftDirectory mcdir) {
+    public InstallProfileProcessor(MinecraftDirectory mcdir, String installerArtifact) {
         this.mcdir = mcdir;
+        this.installerArtifact = installerArtifact;
     }
 
     @Override
     public String process(byte[] arg) throws Exception {
-        Path installer = mcdir.get("forge-installer.jar");
+        Path installer = this.mcdir.get(this.installerArtifact);
         ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(installer));
 
         String version = null;
@@ -49,10 +51,9 @@ class InstallProfileProcessor implements ResultProcessor<byte[], String> {
                     String implVersion = attributes.getValue(Attributes.Name.IMPLEMENTATION_VERSION);
                     if (!isVersionOlderThan22(implVersion)) {
                         asmServerToClientAction = true;
+                        // Do not copy manifest (removes signature)
+                        continue;
                     }
-
-                    // Do not copy manifest (removes signature)
-                    continue;
                 }
 
                 zos.putNextEntry(new ZipEntry(entry.getName()));

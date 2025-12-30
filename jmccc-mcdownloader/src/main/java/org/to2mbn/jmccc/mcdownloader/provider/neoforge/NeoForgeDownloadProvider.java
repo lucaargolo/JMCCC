@@ -1,12 +1,12 @@
-package org.to2mbn.jmccc.mcdownloader.provider.forge;
+package org.to2mbn.jmccc.mcdownloader.provider.neoforge;
 
 import org.to2mbn.jmccc.internal.org.json.JSONException;
 import org.to2mbn.jmccc.internal.org.json.JSONObject;
 import org.to2mbn.jmccc.mcdownloader.download.cache.CacheNames;
 import org.to2mbn.jmccc.mcdownloader.download.combine.CombinedDownloadTask;
-import org.to2mbn.jmccc.mcdownloader.download.tasks.FileDownloadTask;
 import org.to2mbn.jmccc.mcdownloader.download.tasks.MemoryDownloadTask;
 import org.to2mbn.jmccc.mcdownloader.provider.*;
+import org.to2mbn.jmccc.mcdownloader.provider.forge.*;
 import org.to2mbn.jmccc.option.MinecraftDirectory;
 import org.to2mbn.jmccc.util.FileUtils;
 import org.to2mbn.jmccc.util.IOUtils;
@@ -23,54 +23,45 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
-public class ForgeDownloadProvider extends AbstractMinecraftDownloadProvider implements ExtendedDownloadProvider {
+public class NeoForgeDownloadProvider extends AbstractMinecraftDownloadProvider implements ExtendedDownloadProvider {
 
-    public static final String FORGE_GROUP_ID = "net.minecraftforge";
-    public static final String FORGE_ARTIFACT_ID = "forge";
-    public static final String FORGE_OLD_ARTIFACT_ID = "minecraftforge";
+    public static final String FORGE_GROUP_ID = "net.neoforged";
+    public static final String FORGE_ARTIFACT_ID = "neoforge";
     public static final String CLASSIFIER_INSTALLER = "installer";
-    public static final String CLASSIFIER_UNIVERSAL = "universal";
     public static final String MINECRAFT_MAINCLASS = "net.minecraft.client.Minecraft";
 
-    private static final String[] UNIVERSAL_TYPES = new String[]{"jar", "zip"};
-
-    private final ForgeDownloadSource source;
+    private final NeoForgeDownloadSource source;
 
     private MinecraftDownloadProvider upstreamProvider;
 
-    public ForgeDownloadProvider() {
-        this(new DefaultForgeDownloadSource());
+    public NeoForgeDownloadProvider() {
+        this(new DefaultNeoForgeDownloadSource());
     }
 
-    public ForgeDownloadProvider(ForgeDownloadSource source) {
+    public NeoForgeDownloadProvider(NeoForgeDownloadSource source) {
         if (source == null) {
-            source = new DefaultForgeDownloadSource();
+            source = new DefaultNeoForgeDownloadSource();
         }
         this.source = source;
     }
 
-    public CombinedDownloadTask<ForgeVersionList> forgeVersionList() {
-        return CombinedDownloadTask.all(
-                new MemoryDownloadTask(source.getForgeMetadataUrl())
+    public CombinedDownloadTask<NeoForgeVersionList> neoForgeVersionList() {
+        return CombinedDownloadTask.single(new MemoryDownloadTask(source.getNeoForgeMetadataUrl())
                         .andThen(new JsonDecoder())
                         .cacheable()
-                        .cachePool(CacheNames.FORGE_VERSION_META),
-                new MemoryDownloadTask(source.getForgePromotionUrl())
-                        .andThen(new JsonDecoder())
-                        .cacheable()
-                        .cachePool(CacheNames.FORGE_VERSION_PROMO)
-        ).andThen(it -> ForgeVersionList.fromJson((JSONObject) it[0], (JSONObject) it[1]));
+                        .cachePool(CacheNames.NEOFORGE_VERSION_META)
+        .andThen(NeoForgeVersionList::fromJson));
     }
 
     @Override
     public CombinedDownloadTask<String> gameVersionJson(final MinecraftDirectory mcdir, String version) {
-        final ResolvedForgeVersion forgeInfo = ResolvedForgeVersion.resolve(version);
+        final NeoForgeVersion neoForgeInfo = NeoForgeVersion.resolve(version);
 
-        if (forgeInfo != null) {
+        if (neoForgeInfo != null) {
             // for old forge versions
-            return forgeVersion(forgeInfo.getForgeVersion())
+            return neoForgeVersion(neoForgeInfo)
                     .andThenDownload(forge -> CombinedDownloadTask.any(
-                            installerTask(forge.getMavenVersion())
+                            installerTask(forge)
                                     .andThen(new InstallProfileProcessor(mcdir, FORGE_ARTIFACT_ID + "-installer.jar")),
                             upstreamProvider.gameVersionJson(mcdir, forge.getMinecraftVersion())
                                     .andThen(superversion -> createForgeVersionJson(mcdir, forge))
@@ -82,67 +73,28 @@ public class ForgeDownloadProvider extends AbstractMinecraftDownloadProvider imp
 
     @Override
     public CombinedDownloadTask<Void> library(final MinecraftDirectory mcdir, final Library library) {
-        if (FORGE_GROUP_ID.equals(library.getGroupId())) {
-
-            if (FORGE_ARTIFACT_ID.equals(library.getArtifactId())) {
-                return universalTask(library.getVersion(), mcdir.getLibrary(library));
-
-            } else if (FORGE_OLD_ARTIFACT_ID.equals(library.getArtifactId())) {
-                return forgeVersion(library.getVersion())
-                        .andThenDownload(version -> universalTask(version.getMavenVersion(), mcdir.getLibrary(library)));
-            }
-        }
         return null;
     }
 
     @Override
     public CombinedDownloadTask<Void> gameJar(final MinecraftDirectory mcdir, final Version version) {
-        final ResolvedForgeVersion forgeInfo = ResolvedForgeVersion.resolve(version.getRoot());
-        if (forgeInfo == null) {
+        final NeoForgeVersion neoForgeInfo = NeoForgeVersion.resolve(version.getRoot());
+        if (neoForgeInfo == null) {
             return null;
         }
 
-        boolean mergeJar = true;
-        for (Library library : version.getLibraries()) {
-            if (library.getGroupId().equals(FORGE_GROUP_ID)) {
-                mergeJar = false;
-                break;
-            }
-        }
-
         // downloads the super version
-        CombinedDownloadTask<Version> baseTask;
-        if (forgeInfo.getMinecraftVersion() == null) {
-            baseTask = forgeVersion(forgeInfo.getForgeVersion())
-                    .andThenDownload(forge -> downloadSuperVersion(mcdir, forge.getMinecraftVersion()));
-        } else {
-            baseTask = downloadSuperVersion(mcdir, forgeInfo.getMinecraftVersion());
-        }
+        CombinedDownloadTask<Version> baseTask = downloadSuperVersion(mcdir, neoForgeInfo.getMinecraftVersion());
 
         final File targetJar = mcdir.getVersionJar(version);
 
-        if (mergeJar) {
-            // downloads the universal
-            // copy its superversion's jar
-            // remove META-INF
-            // copy universal into the jar
-            final File universalFile = mcdir.getLibrary(new Library("net.minecraftforge", "minecraftforge", forgeInfo.getForgeVersion()));
-            return baseTask
-                    .andThenDownload(superVersion -> forgeVersion(forgeInfo.getForgeVersion())
-                            .andThenDownload(forge -> universalTask(forge.getMavenVersion(), universalFile)
-                                    .andThenReturn(superVersion)))
-                    .andThen(superVersion -> {
-                        mergeJar(mcdir.getVersionJar(superVersion), universalFile, targetJar);
-                        return null;
-                    });
-        } else {
-            // copy its superversion's jar
-            // remove META-INF
-            return baseTask.andThen(superVersion -> {
-                purgeMetaInf(mcdir.getVersionJar(superVersion), targetJar);
-                return null;
-            });
-        }
+        // copy its superversion's jar
+        // remove META-INF
+        return baseTask.andThen(superVersion -> {
+            purgeMetaInf(mcdir.getVersionJar(superVersion), targetJar);
+            return null;
+        });
+
     }
 
     @Override
@@ -150,39 +102,21 @@ public class ForgeDownloadProvider extends AbstractMinecraftDownloadProvider imp
         this.upstreamProvider = upstreamProvider;
     }
 
-    protected CombinedDownloadTask<byte[]> installerTask(String m2Version) {
-        Library lib = new Library(FORGE_GROUP_ID, FORGE_ARTIFACT_ID, m2Version, CLASSIFIER_INSTALLER, "jar");
+    protected CombinedDownloadTask<byte[]> installerTask(NeoForgeVersion neoForgeVersion) {
+        Library lib = new Library(FORGE_GROUP_ID, FORGE_ARTIFACT_ID, neoForgeVersion.getNeoForgeVersion(), CLASSIFIER_INSTALLER, "jar");
         return CombinedDownloadTask.single(
-                new MemoryDownloadTask(source.getForgeMavenRepositoryUrl() + lib.getPath())
+                new MemoryDownloadTask(source.getNeoForgeMavenRepositoryUrl() + lib.getPath())
                         .cacheable()
                         .cachePool(CacheNames.FORGE_INSTALLER));
     }
 
-    protected CombinedDownloadTask<Void> universalTask(String m2Version, File target) {
-        String[] types = UNIVERSAL_TYPES;
-
-        @SuppressWarnings("unchecked")
-        CombinedDownloadTask<Void>[] tasks = new CombinedDownloadTask[types.length + 1];
-        tasks[0] = installerTask(m2Version)
-                .andThen(new UniversalDecompressor(target, m2Version));
-
-        for (int i = 0; i < types.length; i++) {
-            Library lib = new Library(FORGE_GROUP_ID, FORGE_ARTIFACT_ID, m2Version, CLASSIFIER_UNIVERSAL, types[i]);
-            tasks[i + 1] = CombinedDownloadTask.single(
-                    new FileDownloadTask(source.getForgeMavenRepositoryUrl() + lib.getPath(), target)
-                            .cachePool(CacheNames.FORGE_UNIVERSAL));
-        }
-
-        return CombinedDownloadTask.any(tasks);
-    }
-
-    protected JSONObject createForgeVersionJson(MinecraftDirectory mcdir, ForgeVersion forgeVersion) throws IOException, JSONException {
-        JSONObject versionjson = IOUtils.toJson(mcdir.getVersionJson(forgeVersion.getMinecraftVersion()));
+    protected JSONObject createForgeVersionJson(MinecraftDirectory mcdir, NeoForgeVersion neoForgeVersion) throws IOException, JSONException {
+        JSONObject versionjson = IOUtils.toJson(mcdir.getVersionJson(neoForgeVersion.getMinecraftVersion()));
 
         versionjson.remove("downloads");
         versionjson.remove("assets");
         versionjson.remove("assetIndex");
-        versionjson.put("id", forgeVersion.getVersionName());
+        versionjson.put("id", neoForgeVersion.getVersionName());
         versionjson.put("mainClass", MINECRAFT_MAINCLASS);
         return versionjson;
     }
@@ -241,12 +175,12 @@ public class ForgeDownloadProvider extends AbstractMinecraftDownloadProvider imp
         }
     }
 
-    private CombinedDownloadTask<ForgeVersion> forgeVersion(final String forgeVersion) {
-        return forgeVersionList()
+    private CombinedDownloadTask<NeoForgeVersion> neoForgeVersion(final NeoForgeVersion neoForgeVersion) {
+        return neoForgeVersionList()
                 .andThen(versionList -> {
-                    ForgeVersion forge = versionList.get(forgeVersion);
+                    NeoForgeVersion forge = versionList.get(neoForgeVersion.getNeoForgeVersion());
                     if (forge == null) {
-                        throw new IllegalArgumentException("Forge version not found: " + forgeVersion);
+                        throw new IllegalArgumentException("NeoForge version not found: " + neoForgeVersion);
                     }
                     return forge;
                 });

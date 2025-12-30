@@ -5,4 +5,4 @@ dependencies {
     implementation("org.apache.httpcomponents.client5:httpclient5-fluent:5.2.1")
 }
 
-description = "jmccc microsoft authenticator"
+description = "jmccc-microsoft-authenticator"
