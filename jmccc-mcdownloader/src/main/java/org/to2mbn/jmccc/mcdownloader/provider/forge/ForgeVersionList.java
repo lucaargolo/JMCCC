@@ -2,6 +2,8 @@ package org.to2mbn.jmccc.mcdownloader.provider.forge;
 
 import org.to2mbn.jmccc.internal.org.json.JSONArray;
 import org.to2mbn.jmccc.internal.org.json.JSONObject;
+import org.to2mbn.jmccc.mcdownloader.provider.forge.fix.BranchedVersionFix;
+import org.to2mbn.jmccc.mcdownloader.provider.forge.fix.LegacyForgeVersion;
 
 import java.io.Serializable;
 import java.util.*;
@@ -48,6 +50,11 @@ public class ForgeVersionList implements Serializable {
                 forgeVersionMapping.put(version.getForgeVersion(), version);
             }
 
+        }
+        for (LegacyForgeVersion legacy : LegacyForgeVersion.all()) {
+            ForgeVersion version = legacy.getVersion();
+            versions.computeIfAbsent(version.getMinecraftVersion(), it -> new ArrayList<>()).add(version);
+            forgeVersionMapping.put(version.getForgeVersion(), version);
         }
         JSONObject promos = promoJson.getJSONObject("promos");
         for (String key : promos.keySet()) {
@@ -150,7 +157,11 @@ public class ForgeVersionList implements Serializable {
     }
 
     public ForgeVersion get(String forgeVersion) {
-        return forgeVersionMapping.get(forgeVersion);
+        ForgeVersion version = forgeVersionMapping.get(forgeVersion);
+        if (version == null) {
+            version = BranchedVersionFix.resolve(forgeVersionMapping, forgeVersion);
+        }
+        return version;
     }
 
     @Override

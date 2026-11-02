@@ -2,6 +2,7 @@ package org.to2mbn.jmccc.mcdownloader.provider.neoforge;
 
 import org.to2mbn.jmccc.internal.org.json.JSONArray;
 import org.to2mbn.jmccc.internal.org.json.JSONObject;
+import org.to2mbn.jmccc.mcdownloader.provider.neoforge.fix.LegacyNeoForgeFix;
 
 import java.io.Serializable;
 import java.util.*;
@@ -34,12 +35,20 @@ public class NeoForgeVersionList implements Serializable {
     }
 
     public static NeoForgeVersionList fromJson(JSONObject metaJson) {
+        return fromJson(metaJson, Collections.emptyList());
+    }
+
+    public static NeoForgeVersionList fromJson(JSONObject metaJson, List<NeoForgeVersion> legacyVersions) {
         JSONArray jsonArray = metaJson.getJSONArray("versions");
-        List<NeoForgeVersion> neoForgeVersionList = new ArrayList<>();
-        for (int i = 0; i < jsonArray.length(); i++) {
-            String neoForgeVersion = jsonArray.getString(i);
-            neoForgeVersionList.add(new NeoForgeVersion(neoForgeVersion));
+        Map<String, NeoForgeVersion> uniqueVersions = new LinkedHashMap<>();
+        for (NeoForgeVersion legacyVersion : legacyVersions) {
+            uniqueVersions.put(legacyVersion.getNeoForgeVersion(), legacyVersion);
         }
+        for (int i = 0; i < jsonArray.length(); i++) {
+            NeoForgeVersion version = new NeoForgeVersion(jsonArray.getString(i));
+            uniqueVersions.put(version.getNeoForgeVersion(), version);
+        }
+        List<NeoForgeVersion> neoForgeVersionList = new ArrayList<>(uniqueVersions.values());
 
         Map<String, List<NeoForgeVersion>> versions = new HashMap<>();
         Map<String, NeoForgeVersion> latests = new HashMap<>();
@@ -141,7 +150,14 @@ public class NeoForgeVersionList implements Serializable {
     }
 
     public NeoForgeVersion get(String neoForgeVersion) {
-        return neoForgeVersionMapping.get(neoForgeVersion);
+        NeoForgeVersion version = neoForgeVersionMapping.get(neoForgeVersion);
+        if (version == null && neoForgeVersion != null) {
+            NeoForgeVersion legacyVersion = LegacyNeoForgeFix.resolve(neoForgeVersion);
+            if (legacyVersion != null) {
+                version = neoForgeVersionMapping.get(legacyVersion.getNeoForgeVersion());
+            }
+        }
+        return version;
     }
 
     @Override

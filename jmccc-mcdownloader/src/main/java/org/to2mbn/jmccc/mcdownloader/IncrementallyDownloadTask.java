@@ -87,7 +87,7 @@ class IncrementallyDownloadTask extends CombinedDownloadTask<Version> {
                     }, true);
                 }
 
-                if (!mcdir.getVersionJar(versionModel).exists()) {
+                if (!mcdir.getVersionJar(versionModel.getVersion()).exists()) {
                     context.submit(provider.gameJar(mcdir, versionModel), null, true);
                 }
 

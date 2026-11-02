@@ -7,8 +7,8 @@ import org.to2mbn.jmccc.mcdownloader.download.combine.CombinedDownloadTask;
 import org.to2mbn.jmccc.mcdownloader.download.tasks.FileDownloadTask;
 import org.to2mbn.jmccc.mcdownloader.download.tasks.MemoryDownloadTask;
 import org.to2mbn.jmccc.mcdownloader.provider.*;
+import org.to2mbn.jmccc.mcdownloader.provider.forge.fix.*;
 import org.to2mbn.jmccc.option.MinecraftDirectory;
-import org.to2mbn.jmccc.util.FileUtils;
 import org.to2mbn.jmccc.util.IOUtils;
 import org.to2mbn.jmccc.version.Library;
 import org.to2mbn.jmccc.version.Version;
@@ -16,23 +16,17 @@ import org.to2mbn.jmccc.version.parsing.Versions;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
-import java.util.zip.ZipOutputStream;
+import java.util.concurrent.Callable;
 
 public class ForgeDownloadProvider extends AbstractMinecraftDownloadProvider implements ExtendedDownloadProvider {
+
+    private static final String[] UNIVERSAL_TYPES = new String[]{"jar", "zip"};
 
     public static final String FORGE_GROUP_ID = "net.minecraftforge";
     public static final String FORGE_ARTIFACT_ID = "forge";
     public static final String FORGE_OLD_ARTIFACT_ID = "minecraftforge";
     public static final String CLASSIFIER_INSTALLER = "installer";
     public static final String CLASSIFIER_UNIVERSAL = "universal";
-    public static final String MINECRAFT_MAINCLASS = "net.minecraft.client.Minecraft";
-
-    private static final String[] UNIVERSAL_TYPES = new String[]{"jar", "zip"};
 
     private final ForgeDownloadSource source;
 
@@ -65,18 +59,18 @@ public class ForgeDownloadProvider extends AbstractMinecraftDownloadProvider imp
     @Override
     public CombinedDownloadTask<String> gameVersionJson(final MinecraftDirectory mcdir, String version) {
         final ResolvedForgeVersion forgeInfo = ResolvedForgeVersion.resolve(version);
-
         if (forgeInfo != null) {
-            // for old forge versions
             return forgeVersion(forgeInfo.getForgeVersion())
-                    .andThenDownload(forge -> CombinedDownloadTask.any(
-                            installerTask(forge.getMavenVersion())
-                                    .andThen(new InstallProfileProcessor(mcdir, FORGE_ARTIFACT_ID + "-installer.jar")),
-                            upstreamProvider.gameVersionJson(mcdir, forge.getMinecraftVersion())
-                                    .andThen(superversion -> createForgeVersionJson(mcdir, forge))
-                                    .andThen(new VersionJsonInstaller(mcdir))));
+                    .andThenDownload(forge -> DeobfRealmsFix.prepare(mcdir, forge.getMinecraftVersion(), upstreamProvider)
+                            .andThenDownload(parent -> {
+                                CombinedDownloadTask<Callable<String>> installer = installerTask(forge.getMavenVersion())
+                                        .andThen(bytes -> () -> new InstallProfileProcessor(mcdir, FORGE_ARTIFACT_ID + "-installer.jar").process(bytes));
+                                File universal = mcdir.getLibrary(new Library(FORGE_GROUP_ID, FORGE_OLD_ARTIFACT_ID, forge.getForgeVersion()));
+                                CombinedDownloadTask<Callable<String>> legacy = universalTask(forge.getMavenVersion(), universal)
+                                        .andThen(arg -> () -> new VersionJsonInstaller(mcdir).process(createForgeVersionJson(mcdir, forge)));
+                                return CombinedDownloadTask.any(installer, legacy).andThen(Callable::call);
+                            }));
         }
-
         return null;
     }
 
@@ -85,7 +79,9 @@ public class ForgeDownloadProvider extends AbstractMinecraftDownloadProvider imp
         if (FORGE_GROUP_ID.equals(library.getGroupId())) {
 
             if (FORGE_ARTIFACT_ID.equals(library.getArtifactId())) {
-                return universalTask(library.getVersion(), mcdir.getLibrary(library));
+                if (library.getClassifier() == null || CLASSIFIER_UNIVERSAL.equals(library.getClassifier())) {
+                    return universalTask(library.getVersion(), mcdir.getLibrary(library));
+                }
 
             } else if (FORGE_OLD_ARTIFACT_ID.equals(library.getArtifactId())) {
                 return forgeVersion(library.getVersion())
@@ -97,7 +93,9 @@ public class ForgeDownloadProvider extends AbstractMinecraftDownloadProvider imp
 
     @Override
     public CombinedDownloadTask<Void> gameJar(final MinecraftDirectory mcdir, final Version version) {
-        final ResolvedForgeVersion forgeInfo = ResolvedForgeVersion.resolve(version.getRoot());
+        ResolvedForgeVersion resolved = ResolvedForgeVersion.resolve(version.getVersion());
+        if (resolved == null) resolved = ResolvedForgeVersion.resolve(version.getRoot());
+        final ResolvedForgeVersion forgeInfo = resolved;
         if (forgeInfo == null) {
             return null;
         }
@@ -119,27 +117,27 @@ public class ForgeDownloadProvider extends AbstractMinecraftDownloadProvider imp
             baseTask = downloadSuperVersion(mcdir, forgeInfo.getMinecraftVersion());
         }
 
-        final File targetJar = mcdir.getVersionJar(version);
+        final File targetJar = mcdir.getVersionJar(version.getVersion());
 
         if (mergeJar) {
             // downloads the universal
             // copy its superversion's jar
             // remove META-INF
             // copy universal into the jar
-            final File universalFile = mcdir.getLibrary(new Library("net.minecraftforge", "minecraftforge", forgeInfo.getForgeVersion()));
+            final File universalFile = mcdir.getLibrary(new Library(FORGE_GROUP_ID, FORGE_OLD_ARTIFACT_ID, forgeInfo.getForgeVersion()));
             return baseTask
                     .andThenDownload(superVersion -> forgeVersion(forgeInfo.getForgeVersion())
                             .andThenDownload(forge -> universalTask(forge.getMavenVersion(), universalFile)
-                                    .andThenReturn(superVersion)))
-                    .andThen(superVersion -> {
-                        mergeJar(mcdir.getVersionJar(superVersion), universalFile, targetJar);
-                        return null;
-                    });
+                                    .andThenDownload(arg -> CombinedDownloadTask.all(LegacyFmlLibrariesFix.download(mcdir, universalFile), LegacyModLoaderFix.download(mcdir, forge.getMinecraftVersion(), universalFile)))
+                                    .andThen(results -> {
+                                        LegacyJarFix.merge(mcdir.getVersionJar(superVersion), universalFile, targetJar, (File[]) results[1]);
+                                        return null;
+                                    })));
         } else {
             // copy its superversion's jar
             // remove META-INF
             return baseTask.andThen(superVersion -> {
-                purgeMetaInf(mcdir.getVersionJar(superVersion), targetJar);
+                LegacyJarFix.purgeMetaInf(mcdir.getVersionJar(superVersion), targetJar);
                 return null;
             });
         }
@@ -159,86 +157,28 @@ public class ForgeDownloadProvider extends AbstractMinecraftDownloadProvider imp
     }
 
     protected CombinedDownloadTask<Void> universalTask(String m2Version, File target) {
-        String[] types = UNIVERSAL_TYPES;
+        LegacyForgeVersion legacy = LegacyForgeVersion.get(m2Version);
+        if (legacy != null) return legacy.download(target);
 
         @SuppressWarnings("unchecked")
-        CombinedDownloadTask<Void>[] tasks = new CombinedDownloadTask[types.length + 1];
-        tasks[0] = installerTask(m2Version)
-                .andThen(new UniversalDecompressor(target, m2Version));
-
-        for (int i = 0; i < types.length; i++) {
-            Library lib = new Library(FORGE_GROUP_ID, FORGE_ARTIFACT_ID, m2Version, CLASSIFIER_UNIVERSAL, types[i]);
-            tasks[i + 1] = CombinedDownloadTask.single(
-                    new FileDownloadTask(source.getForgeMavenRepositoryUrl() + lib.getPath(), target)
-                            .cachePool(CacheNames.FORGE_UNIVERSAL));
+        CombinedDownloadTask<Void>[] tasks = new CombinedDownloadTask[UNIVERSAL_TYPES.length + 2];
+        tasks[0] = installerTask(m2Version).andThen(new UniversalDecompressor(target, m2Version));
+        int index = 1;
+        for (String type : UNIVERSAL_TYPES) {
+            Library lib = new Library(FORGE_GROUP_ID, FORGE_ARTIFACT_ID, m2Version, CLASSIFIER_UNIVERSAL, type);
+            tasks[index++] = CombinedDownloadTask.single(new FileDownloadTask(source.getForgeMavenRepositoryUrl() + lib.getPath(), target).cachePool(CacheNames.FORGE_UNIVERSAL));
         }
-
+        tasks[index] = ClientArchiveFix.download(source, m2Version, target);
         return CombinedDownloadTask.any(tasks);
     }
 
     protected JSONObject createForgeVersionJson(MinecraftDirectory mcdir, ForgeVersion forgeVersion) throws IOException, JSONException {
         JSONObject versionjson = IOUtils.toJson(mcdir.getVersionJson(forgeVersion.getMinecraftVersion()));
-
         versionjson.remove("downloads");
-        versionjson.remove("assets");
-        versionjson.remove("assetIndex");
         versionjson.put("id", forgeVersion.getVersionName());
-        versionjson.put("mainClass", MINECRAFT_MAINCLASS);
+        File universal = mcdir.getLibrary(new Library(FORGE_GROUP_ID, FORGE_OLD_ARTIFACT_ID, forgeVersion.getForgeVersion()));
+        LegacyFmlTweakerFix.apply(versionjson, universal, source.getForgeMavenRepositoryUrl());
         return versionjson;
-    }
-
-    protected void mergeJar(File parent, File universal, File target) throws IOException {
-        FileUtils.prepareWrite(target);
-        try (ZipInputStream in = new ZipInputStream(Files.newInputStream(parent.toPath()));
-             ZipInputStream universalIn = new ZipInputStream(Files.newInputStream(universal.toPath()));
-             ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(target.toPath()))) {
-            ZipEntry entry;
-            byte[] buf = new byte[8192];
-            int read;
-
-            Set<String> universalEntries = new HashSet<>();
-
-            while ((entry = universalIn.getNextEntry()) != null) {
-                universalEntries.add(entry.getName());
-                out.putNextEntry(entry);
-                while ((read = universalIn.read(buf)) != -1) {
-                    out.write(buf, 0, read);
-                }
-                out.closeEntry();
-                universalIn.closeEntry();
-            }
-
-            while ((entry = in.getNextEntry()) != null) {
-                if (isNotMetaInfEntry(entry) && !universalEntries.contains(entry.getName())) {
-                    out.putNextEntry(entry);
-                    while ((read = in.read(buf)) != -1) {
-                        out.write(buf, 0, read);
-                    }
-                    out.closeEntry();
-                }
-                in.closeEntry();
-            }
-        }
-    }
-
-    protected void purgeMetaInf(File src, File target) throws IOException {
-        FileUtils.prepareWrite(target);
-        try (ZipInputStream in = new ZipInputStream(Files.newInputStream(src.toPath()));
-             ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(target.toPath()))) {
-            ZipEntry entry;
-            byte[] buf = new byte[8192];
-            int read;
-            while ((entry = in.getNextEntry()) != null) {
-                if (isNotMetaInfEntry(entry)) {
-                    out.putNextEntry(entry);
-                    while ((read = in.read(buf)) != -1) {
-                        out.write(buf, 0, read);
-                    }
-                    out.closeEntry();
-                }
-                in.closeEntry();
-            }
-        }
     }
 
     private CombinedDownloadTask<ForgeVersion> forgeVersion(final String forgeVersion) {
@@ -252,10 +192,6 @@ public class ForgeDownloadProvider extends AbstractMinecraftDownloadProvider imp
                 });
     }
 
-    private boolean isNotMetaInfEntry(ZipEntry entry) {
-        return !entry.getName().startsWith("META-INF/");
-    }
-
     private CombinedDownloadTask<Version> downloadSuperVersion(final MinecraftDirectory mcdir, String version) {
         return upstreamProvider.gameVersionJson(mcdir, version)
                 .andThenDownload(resolvedMcversion -> {
@@ -263,5 +199,4 @@ public class ForgeDownloadProvider extends AbstractMinecraftDownloadProvider imp
                     return upstreamProvider.gameJar(mcdir, superversion).andThenReturn(superversion);
                 });
     }
-
 }

@@ -4,21 +4,23 @@ import org.to2mbn.jmccc.internal.org.json.JSONObject;
 import org.to2mbn.jmccc.internal.org.json.JSONTokener;
 import org.to2mbn.jmccc.mcdownloader.download.tasks.ResultProcessor;
 import org.to2mbn.jmccc.mcdownloader.provider.VersionJsonInstaller;
+import org.to2mbn.jmccc.mcdownloader.provider.forge.fix.InstallerActionFix;
+import org.to2mbn.jmccc.mcdownloader.provider.forge.fix.LauncherProfileFix;
+import org.to2mbn.jmccc.mcdownloader.provider.forge.fix.LegacyVersionProfileFix;
 import org.to2mbn.jmccc.option.MinecraftDirectory;
+import org.to2mbn.jmccc.util.FileUtils;
 import org.to2mbn.jmccc.util.IOUtils;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.jar.Attributes;
-import java.util.jar.Manifest;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-import java.util.zip.ZipOutputStream;
 
 public class InstallProfileProcessor implements ResultProcessor<byte[], String> {
 
@@ -32,101 +34,62 @@ public class InstallProfileProcessor implements ResultProcessor<byte[], String> 
 
     @Override
     public String process(byte[] arg) throws Exception {
-        Path installer = this.mcdir.get(this.installerArtifact);
-        ZipOutputStream zos = new ZipOutputStream(Files.newOutputStream(installer));
-
-        String version = null;
-        String newInstallerVersion = null;
-
-        boolean asmServerToClientAction = false;
-
+        JSONObject installProfile = null;
         try (ZipInputStream in = new ZipInputStream(new ByteArrayInputStream(arg))) {
             ZipEntry entry;
             while ((entry = in.getNextEntry()) != null) {
-
-                // Read MANIFEST.MF to determine SimpleInstaller version
-                if ("META-INF/MANIFEST.MF".equals(entry.getName())) {
-                    Manifest manifest = new Manifest(in);
-                    Attributes attributes = manifest.getEntries().get("net/minecraftforge/installer/");
-                    String implVersion = attributes.getValue(Attributes.Name.IMPLEMENTATION_VERSION);
-                    if (!isVersionOlderThan22(implVersion)) {
-                        asmServerToClientAction = true;
-                        // Do not copy manifest (removes signature)
-                        continue;
-                    }
-                }
-
-                zos.putNextEntry(new ZipEntry(entry.getName()));
-
                 if ("install_profile.json".equals(entry.getName())) {
-                    byte[] bytes = IOUtils.toByteArray(in);
-                    JSONObject installProfile = new JSONObject(new JSONTokener(new String(bytes)));
-                    JSONObject versionInfo = processJson(installProfile);
-
-                    // 1.12.2 2850-
-                    if (versionInfo != null) {
-                        version = new VersionJsonInstaller(mcdir).process(versionInfo);
-                        in.closeEntry();
-                        break;
-                    }
-
-                    newInstallerVersion = installProfile.optString("version");
-                    zos.write(bytes);
-
-                } else if ("net/minecraftforge/installer/SimpleInstaller.class".equals(entry.getName())) {
-
-                    byte[] out = ForgeInstallerTweaker.tweakSimpleInstaller(in, asmServerToClientAction);
-                    zos.write(out);
-
-                } else {
-                    zos.write(IOUtils.toByteArray(in));
+                    installProfile = new JSONObject(new JSONTokener(new String(IOUtils.toByteArray(in), StandardCharsets.UTF_8)));
+                    break;
                 }
-
                 in.closeEntry();
-                zos.closeEntry();
             }
         }
 
-        zos.close();
-
-        if (version != null) {
-            Files.delete(installer);
-            return version;
+        if (installProfile == null) {
+            throw new IOException("Forge installer is missing install_profile.json");
         }
 
-        // 1.12.2 2851+
-        runInstaller(installer, asmServerToClientAction);
-        Files.delete(installer);
-        return newInstallerVersion;
-    }
+        JSONObject versionInfo = processJson(installProfile);
+        if (versionInfo != null) {
+            LegacyVersionProfileFix.apply(installProfile, versionInfo);
+            return new VersionJsonInstaller(mcdir).process(versionInfo);
+        }
 
-    private boolean isVersionOlderThan22(String version) {
-        if (version == null) return false;
-
-        String[] parts = version.split("\\.");
-        int vMajor = parts.length > 0 ? Integer.parseInt(parts[0]) : 0;
-        int vMinor = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
-
-        return vMajor > 2 || (vMajor == 2 && vMinor >= 2);
+        String version = installProfile.getString("version");
+        Path installer = mcdir.get(installerArtifact);
+        FileUtils.prepareWrite(installer.toFile());
+        try {
+            Files.write(installer, arg);
+            runInstaller(installer);
+            return version;
+        } finally {
+            Files.deleteIfExists(installer);
+        }
     }
 
     protected JSONObject processJson(JSONObject installprofile) {
         return installprofile.optJSONObject("versionInfo");
     }
 
-    private void runInstaller(Path installerJar, boolean tweaked) throws Exception {
+    private void runInstaller(Path installerJar) throws Exception {
         //Create default launcher_profiles.json
-        Path launcherProfile = mcdir.get("launcher_profiles.json");
-        if (!Files.exists(launcherProfile)) {
-            Files.write(launcherProfile, "{}".getBytes(StandardCharsets.UTF_8));
-        }
+        LauncherProfileFix.prepare(mcdir);
 
         //Run forge installer
-        try (URLClassLoader cl = new URLClassLoader(new URL[]{installerJar.toFile().toURI().toURL()})) {
+        try (URLClassLoader cl = new URLClassLoader(new URL[]{installerJar.toFile().toURI().toURL()}, ClassLoader.getSystemClassLoader().getParent())) {
             Class<?> installer = cl.loadClass("net.minecraftforge.installer.SimpleInstaller");
-            Method main = installer.getMethod("main", String[].class);
-            //We have tweaked install server to install client
-            main.invoke(null, (Object) new String[]{tweaked ? "--installServer" : "--installClient", mcdir.getAbsolutePath()});
+            installer.getField("headless").setBoolean(null, true);
+            Class<?> actions = cl.loadClass("net.minecraftforge.installer.actions.Actions");
+            Class<?> progressCallback = cl.loadClass("net.minecraftforge.installer.actions.ProgressCallback");
+            Method loadProfile = cl.loadClass("net.minecraftforge.installer.json.Util").getMethod("loadInstallProfile");
+            Method getAction = actions.getMethod("getAction", loadProfile.getReturnType(), progressCallback);
+            Object action = getAction.invoke(actions.getField("CLIENT").get(null), loadProfile.invoke(null), progressCallback.getField("TO_STD_OUT").get(null));
+            Class<?> actionType = getAction.getReturnType();
+            boolean installed = InstallerActionFix.run(action, actionType, mcdir.getRoot(), installerJar.toFile());
+            if (!installed) {
+                throw new IOException("Forge client installation failed");
+            }
         }
     }
 }

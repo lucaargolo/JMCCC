@@ -1,5 +1,7 @@
 package org.to2mbn.jmccc.mcdownloader.provider.forge;
 
+import org.to2mbn.jmccc.mcdownloader.provider.forge.fix.MinecraftVersionFix;
+
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -31,7 +33,7 @@ public class ForgeVersion implements Serializable {
 
     // Getters
     public String getMinecraftVersion() {
-        return minecraftVersion;
+        return MinecraftVersionFix.normalize(minecraftVersion);
     }
 
     public String getForgeVersion() {

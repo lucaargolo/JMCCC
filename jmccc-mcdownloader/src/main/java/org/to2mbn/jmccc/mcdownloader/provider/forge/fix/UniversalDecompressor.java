@@ -1,4 +1,4 @@
-package org.to2mbn.jmccc.mcdownloader.provider.forge;
+package org.to2mbn.jmccc.mcdownloader.provider.forge.fix;
 
 import org.to2mbn.jmccc.mcdownloader.download.tasks.ResultProcessor;
 import org.to2mbn.jmccc.util.FileUtils;
@@ -6,11 +6,12 @@ import org.to2mbn.jmccc.util.FileUtils;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-class UniversalDecompressor implements ResultProcessor<byte[], Void> {
+public class UniversalDecompressor implements ResultProcessor<byte[], Void> {
 
     private static final String NAME_TEMPLATE = "forge-%s-universal.jar";
     private static final String OLD_NAME_TEMPLATE = "minecraftforge-universal-%s.jar";
@@ -23,7 +24,9 @@ class UniversalDecompressor implements ResultProcessor<byte[], Void> {
 
         names = new String[]{
                 String.format(NAME_TEMPLATE, m2Version),
-                String.format(OLD_NAME_TEMPLATE, m2Version)
+                String.format(OLD_NAME_TEMPLATE, m2Version),
+                "maven/net/minecraftforge/forge/" + m2Version + "/forge-" + m2Version + ".jar",
+                "maven/net/minecraftforge/forge/" + m2Version + "/forge-" + m2Version + "-universal.jar"
         };
     }
 
@@ -49,7 +52,7 @@ class UniversalDecompressor implements ResultProcessor<byte[], Void> {
             }
         }
 
-        throw new IllegalArgumentException("No universal jar found");
+        throw new IOException("No universal jar found");
     }
 
     private boolean isUniversalJar(String name) {

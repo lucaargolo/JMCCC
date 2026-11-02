@@ -1,5 +1,9 @@
 package org.to2mbn.jmccc.mcdownloader.provider.neoforge;
 
+import org.to2mbn.jmccc.mcdownloader.provider.neoforge.fix.CalendarVersionFix;
+import org.to2mbn.jmccc.mcdownloader.provider.neoforge.fix.LegacyNeoForgeFix;
+import org.to2mbn.jmccc.mcdownloader.provider.neoforge.fix.SnapshotVersionFix;
+
 import java.io.Serializable;
 import java.util.Objects;
 import java.util.regex.Matcher;
@@ -8,51 +12,28 @@ import java.util.regex.Pattern;
 public class NeoForgeVersion implements Serializable {
 
     private static final Pattern NEOFORGE_VERSION_PATTERN = Pattern.compile("^neoforge-([\\w.\\-+]+)$");
+    private static final String MODERN_ARTIFACT_ID = "neoforge";
 
     private static final long serialVersionUID = 1L;
 
     private final String neoForgeVersion;
     private final String minecraftVersion;
     private final boolean beta;
+    private final boolean legacy;
 
     public NeoForgeVersion(String neoForgeVersion) {
-        this.neoForgeVersion = Objects.requireNonNull(neoForgeVersion);
-        String[] extras = neoForgeVersion.split("\\+");
-        String[] versions = neoForgeVersion.split("\\.");
+        this(neoForgeVersion, LegacyNeoForgeFix.normalize(Objects.requireNonNull(neoForgeVersion)));
+    }
 
-        String mcVersion;
+    private NeoForgeVersion(String neoForgeVersion, String legacyVersion) {
+        this.legacy = legacyVersion != null;
+        this.neoForgeVersion = legacy ? legacyVersion : neoForgeVersion;
+        this.minecraftVersion = legacy ? LegacyNeoForgeFix.MINECRAFT_VERSION : resolveMinecraftVersion(neoForgeVersion);
+        this.beta = this.neoForgeVersion.endsWith("-beta");
+    }
 
-
-        try {
-            int mcMajor = Integer.parseInt(versions[0]);
-            int mcMinor = Integer.parseInt(versions[1]);
-
-            String extra;
-            if(extras.length > 1) {
-                extra = "-" + extras[1];
-            }else{
-                extra = "";
-            }
-
-            if(mcMajor > 21) {
-                mcVersion = mcMajor + "." + mcMinor + extra;
-            }else{
-                mcVersion = "1." + mcMajor + "." + mcMinor + extra;
-            }
-
-            if(mcVersion.endsWith(".0")) {
-                mcVersion = mcVersion.substring(0, mcVersion.length() - 2);
-            }
-        }catch (NumberFormatException e) {
-            mcVersion = versions[0] + "." + versions[1];
-
-            if(mcVersion.startsWith("0.")) {
-                mcVersion = mcVersion.substring(2);
-            }
-        }
-
-        this.minecraftVersion = mcVersion;
-        this.beta = neoForgeVersion.endsWith("-beta");
+    public static NeoForgeVersion legacy(String neoForgeVersion) {
+        return new NeoForgeVersion(neoForgeVersion, neoForgeVersion);
     }
 
     public static NeoForgeVersion resolve(String version) {
@@ -62,7 +43,23 @@ public class NeoForgeVersion implements Serializable {
             return new NeoForgeVersion(neoForgeVersion);
         }
 
-        return null;
+        return LegacyNeoForgeFix.resolve(version);
+    }
+
+    private static String resolveMinecraftVersion(String neoForgeVersion) {
+        int metadata = neoForgeVersion.indexOf('+');
+        String[] versions = (metadata < 0 ? neoForgeVersion : neoForgeVersion.substring(0, metadata)).split("\\.");
+        try {
+            int major = Integer.parseInt(versions[0]);
+            int minor = Integer.parseInt(versions[1]);
+            String minecraftVersion = CalendarVersionFix.minecraftVersion(major, minor, versions);
+            if (minecraftVersion == null) {
+                minecraftVersion = "1." + major + (minor == 0 ? "" : "." + minor);
+            }
+            return minecraftVersion + SnapshotVersionFix.suffix(neoForgeVersion, metadata);
+        } catch (NumberFormatException e) {
+            return SnapshotVersionFix.minecraftVersion(versions);
+        }
     }
 
     // Getters
@@ -76,6 +73,18 @@ public class NeoForgeVersion implements Serializable {
 
     public boolean isBeta() {
         return beta;
+    }
+
+    public boolean isLegacy() {
+        return legacy;
+    }
+
+    public String getArtifactId() {
+        return legacy ? LegacyNeoForgeFix.ARTIFACT_ID : MODERN_ARTIFACT_ID;
+    }
+
+    public String getArtifactVersion() {
+        return legacy ? minecraftVersion + "-" + neoForgeVersion : neoForgeVersion;
     }
 
     public String getVersionName() {

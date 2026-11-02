@@ -1,11 +1,13 @@
-package org.to2mbn.jmccc.mcdownloader.provider.forge;
+package org.to2mbn.jmccc.mcdownloader.provider.forge.fix;
+
+import org.to2mbn.jmccc.mcdownloader.provider.forge.ForgeVersion;
 
 import java.io.Serializable;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-class ResolvedForgeVersion implements Serializable {
+public class ResolvedForgeVersion implements Serializable {
 
     private static final Pattern FORGE_VERSION_PATTERN_1 = Pattern.compile("^([\\w\\.\\-]+)-[Ff]orge\\1?-([\\w\\.\\-]+)$");
     private static final Pattern FORGE_VERSION_PATTERN_2 = Pattern.compile("^([\\w\\.\\-]+)-[Ff]orge([\\w\\.\\-]+)$");
@@ -54,7 +56,7 @@ class ResolvedForgeVersion implements Serializable {
      * @return the minecraft version of the forge version, may be null
      */
     public String getMinecraftVersion() {
-        return minecraftVersion;
+        return MinecraftVersionFix.normalize(minecraftVersion);
     }
 
     public String getVersionName() {
