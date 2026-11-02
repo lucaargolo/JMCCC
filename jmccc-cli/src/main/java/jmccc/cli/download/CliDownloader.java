@@ -7,6 +7,7 @@ import org.to2mbn.jmccc.mcdownloader.provider.DownloadProviderChain;
 import org.to2mbn.jmccc.mcdownloader.provider.MojangDownloadProvider;
 import org.to2mbn.jmccc.mcdownloader.provider.fabric.FabricDownloadProvider;
 import org.to2mbn.jmccc.mcdownloader.provider.forge.ForgeDownloadProvider;
+import org.to2mbn.jmccc.mcdownloader.provider.legacyfabric.LegacyFabricDownloadProvider;
 import org.to2mbn.jmccc.mcdownloader.provider.liteloader.LiteloaderDownloadProvider;
 import org.to2mbn.jmccc.mcdownloader.provider.quilt.QuiltDownloadProvider;
 import org.to2mbn.jmccc.option.MinecraftDirectory;
@@ -19,6 +20,7 @@ public class CliDownloader {
     public static ForgeDownloadProvider forgeProvider;
     public static LiteloaderDownloadProvider liteloaderProvider;
     public static FabricDownloadProvider fabricProvider;
+    public static FabricDownloadProvider legacyFabricProvider;
     public static FabricDownloadProvider quiltProvider;
     public static MinecraftDownloader downloader;
 
@@ -27,6 +29,7 @@ public class CliDownloader {
         forgeProvider = new ForgeDownloadProvider(bmclApiProvider);
         liteloaderProvider = new LiteloaderDownloadProvider(bmclApiProvider);
         fabricProvider = new FabricDownloadProvider();
+        legacyFabricProvider = new LegacyFabricDownloadProvider();
         quiltProvider = new QuiltDownloadProvider();
         downloader = MinecraftDownloaderBuilder.create()
                 .providerChain(DownloadProviderChain.create()
@@ -34,6 +37,7 @@ public class CliDownloader {
                         .addProvider(forgeProvider)
                         .addProvider(liteloaderProvider)
                         .addProvider(fabricProvider)
+                        .addProvider(legacyFabricProvider)
                         .addProvider(quiltProvider)
                 )
                 .build();

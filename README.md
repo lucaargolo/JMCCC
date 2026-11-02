@@ -12,7 +12,7 @@ JMCCC is licensed under [the MIT license](https://github.com/xfl03/JMCCC/LICENSE
  * Scalable authentication
    * Supports Microsoft Account/Mojang Account/Offline, and can be extended
  * Downloads all versions of Minecraft
-   * Supports Forge/Liteloader/Fabric/Quilt
+   * Supports Forge/Liteloader/Fabric/Legacy Fabric/Quilt
      * Supports Liteloader snapshots
      * Supports Fabric/Quilt in Minecraft snapshots
    * Customizable download source
@@ -122,24 +122,29 @@ Don't forget to shutdown the downloader when you are no longer going to use it.
 downloader.shutdown();
 ```
 
-### Downloading Forge/Liteloader/Fabric/Quilt
+### Downloading Forge/Liteloader/Fabric/Legacy Fabric/Quilt
 ```java
 MinecraftDirectory dir = new MinecraftDirectory("/home/user/.minecraft");
 ForgeDownloadProvider forgeProvider = new ForgeDownloadProvider();
 LiteloaderDownloadProvider liteloaderProvider = new LiteloaderDownloadProvider();
+LegacyFabricDownloadProvider legacyFabricProvider = new LegacyFabricDownloadProvider();
 MinecraftDownloader downloader = MinecraftDownloaderBuilder.create()
 	.providerChain(DownloadProviderChain.create()
 		.addProvider(forgeProvider)
-		.addProvider(liteloaderProvider))
+		.addProvider(liteloaderProvider)
+		.addProvider(legacyFabricProvider))
 	.build();
 
 downloader.downloadIncrementally(dir, "1.19.3-forge-44.1.7", new CallbackAdapter<Version>() {...});
 downloader.downloadIncrementally(dir, "1.12.2-LiteLoader1.12.2", new CallbackAdapter<Version>() {...});
 downloader.downloadIncrementally(dir, "fabric-loader-0.14.13-1.19.3", new CallbackAdapter<Version>() {...});
+downloader.downloadIncrementally(dir, "legacyfabric-loader-0.18.4-1.8.9", new CallbackAdapter<Version>() {...});
 downloader.downloadIncrementally(dir, "quilt-loader-0.17.11-1.19.3", new CallbackAdapter<Version>() {...});
 downloader.download(forgeProvider.forgeVersionList(), new CallbackAdapter<ForgeVersionList>() {...});
 downloader.download(liteloaderProvider.liteloaderVersionList(), new CallbackAdapter<LiteloaderVersionList>() {...});
 ```
+
+Legacy Fabric reuses `FabricVersion` and `FabricVersionList`; query versions with `legacyFabricProvider.fabricVersionList()`. The CLI accepts `legacyfabric`, `legacyfabric-snapshot`, or an explicit `legacyfabric-loader-<loaderVersion>-<minecraftVersion>` ID.
 
 ### FML options
 JMCCC won't add fml options (such as `-Dfml.ignoreInvalidMinecraftCertificates=true` and `-Dfml.ignorePatchDiscrepancies=true`) to the command line automatically.

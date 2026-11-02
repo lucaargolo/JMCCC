@@ -32,6 +32,10 @@ public class FabricVersionList {
     }
 
     public static FabricVersionList fromJson(JSONObject json) {
+        return fromJson(json, null);
+    }
+
+    public static FabricVersionList fromJson(JSONObject json, String loaderName) {
         JSONArray game = json.getJSONArray("game");
         List<String> minecraftReleaseVersions = new ArrayList<>();
         List<String> minecraftSnapshotVersions = new ArrayList<>();
@@ -43,17 +47,17 @@ public class FabricVersionList {
 
         JSONArray loader = json.getJSONArray("loader");
         List<String> fabricLoaderVersions = new ArrayList<>();
-        String loaderName = "fabric";
+        String resolvedLoaderName = loaderName == null ? "fabric" : loaderName;
         for (Object obj : loader) {
             JSONObject it = (JSONObject) obj;
-            if (it.getString("maven").contains("quilt")) {
-                loaderName = "quilt";
+            if (loaderName == null && it.getString("maven").contains("quilt")) {
+                resolvedLoaderName = "quilt";
             }
             fabricLoaderVersions.add(it.getString("version"));
         }
 
         return new FabricVersionList(minecraftReleaseVersions, minecraftSnapshotVersions,
-                fabricLoaderVersions, loaderName);
+                fabricLoaderVersions, resolvedLoaderName);
     }
 
     @Override

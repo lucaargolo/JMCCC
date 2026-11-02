@@ -24,6 +24,14 @@ public class ModLoaderDownloader {
         return CliDownloader.get(CliDownloader.fabricProvider.fabricVersionList()).getLatestSnapshot();
     }
 
+    public static FabricVersion getLatestLegacyFabric() throws ExecutionException, InterruptedException {
+        return CliDownloader.get(CliDownloader.legacyFabricProvider.fabricVersionList()).getLatestRelease();
+    }
+
+    public static FabricVersion getLatestLegacyFabricSnapshot() throws ExecutionException, InterruptedException {
+        return CliDownloader.get(CliDownloader.legacyFabricProvider.fabricVersionList()).getLatestSnapshot();
+    }
+
     public static FabricVersion getLatestQuilt() throws ExecutionException, InterruptedException {
         return CliDownloader.get(CliDownloader.quiltProvider.fabricVersionList()).getLatestRelease();
     }

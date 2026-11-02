@@ -12,7 +12,7 @@ JMCCC使用[MIT许可证](https://github.com/xfl03/JMCCC/LICENSE)。
  * 可拓展的登录系统
    * 默认支持Microsoft账户/Mojang账户/离线，可以自行扩展
  * 下载各个版本的Minecraft
-   * 支持Forge/Liteloader/Fabric/Quilt下载
+   * 支持Forge/Liteloader/Fabric/Legacy Fabric/Quilt下载
      * 支持Liteloader的快照版本
      * 支持在Minecraft快照版本使用Fabric/Quilt
    * 可自定义下载源
@@ -122,24 +122,29 @@ downloader.downloadIncrementally(dir, "1.19.3", new CallbackAdapter<Version>() {
 downloader.shutdown();
 ```
 
-### 下载Forge/Liteloader/Fabric/Quilt
+### 下载Forge/Liteloader/Fabric/Legacy Fabric/Quilt
 ```java
 MinecraftDirectory dir = new MinecraftDirectory("/home/user/.minecraft");
         ForgeDownloadProvider forgeProvider = new ForgeDownloadProvider();
         LiteloaderDownloadProvider liteloaderProvider = new LiteloaderDownloadProvider();
+        LegacyFabricDownloadProvider legacyFabricProvider = new LegacyFabricDownloadProvider();
         MinecraftDownloader downloader = MinecraftDownloaderBuilder.create()
         .providerChain(DownloadProviderChain.create()
         .addProvider(forgeProvider)
-        .addProvider(liteloaderProvider))
+        .addProvider(liteloaderProvider)
+        .addProvider(legacyFabricProvider))
         .build();
 
         downloader.downloadIncrementally(dir, "1.19.3-forge-44.1.7", new CallbackAdapter<Version>() {...});
         downloader.downloadIncrementally(dir, "1.12.2-LiteLoader1.12.2", new CallbackAdapter<Version>() {...});
         downloader.downloadIncrementally(dir, "fabric-loader-0.14.13-1.19.3", new CallbackAdapter<Version>() {...});
+        downloader.downloadIncrementally(dir, "legacyfabric-loader-0.18.4-1.8.9", new CallbackAdapter<Version>() {...});
         downloader.downloadIncrementally(dir, "quilt-loader-0.17.11-1.19.3", new CallbackAdapter<Version>() {...});
         downloader.download(forgeProvider.forgeVersionList(), new CallbackAdapter<ForgeVersionList>() {...});
         downloader.download(liteloaderProvider.liteloaderVersionList(), new CallbackAdapter<LiteloaderVersionList>() {...});
 ```
+
+Legacy Fabric复用`FabricVersion`和`FabricVersionList`，通过`legacyFabricProvider.fabricVersionList()`查询版本。CLI支持`legacyfabric`、`legacyfabric-snapshot`或完整的`legacyfabric-loader-<loaderVersion>-<minecraftVersion>`版本ID。
 
 ### FML参数
 JMCCC不像其它一些启动器，JMCCC不会自动添加类似于`-Dfml.ignoreInvalidMinecraftCertificates=true`或`-Dfml.ignorePatchDiscrepancies=true`之类的FML参数。

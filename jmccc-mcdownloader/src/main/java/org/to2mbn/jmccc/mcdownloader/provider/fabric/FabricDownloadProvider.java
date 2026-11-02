@@ -26,7 +26,7 @@ public class FabricDownloadProvider extends AbstractMinecraftDownloadProvider im
     public CombinedDownloadTask<FabricVersionList> fabricVersionList() {
         return CombinedDownloadTask.single(new MemoryDownloadTask(source.getFabricVersionsUrl())
                 .andThen(new JsonDecoder())
-                .andThen(FabricVersionList::fromJson)
+                .andThen(json -> FabricVersionList.fromJson(json, getLoaderName()))
                 .cacheable()
                 .cachePool(CacheNames.FABRIC_VERSION_LIST));
     }
@@ -41,6 +41,7 @@ public class FabricDownloadProvider extends AbstractMinecraftDownloadProvider im
                 fabricVersion.getMinecraftVersion(), fabricVersion.getFabricLoaderVersion());
         return CombinedDownloadTask.single(new MemoryDownloadTask(url))
                 .andThen(new JsonDecoder())
+                .andThen(json -> json.put("id", fabricVersion.getVersionName()))
                 .andThen(new VersionJsonInstaller(mcdir));
     }
 

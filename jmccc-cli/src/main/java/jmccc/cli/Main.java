@@ -112,6 +112,10 @@ public class Main {
                 return ModLoaderDownloader.getLatestFabric().getVersionName();
             case "fabric-snapshot":
                 return ModLoaderDownloader.getLatestFabricSnapshot().getVersionName();
+            case "legacyfabric":
+                return ModLoaderDownloader.getLatestLegacyFabric().getVersionName();
+            case "legacyfabric-snapshot":
+                return ModLoaderDownloader.getLatestLegacyFabricSnapshot().getVersionName();
             case "quilt":
                 return ModLoaderDownloader.getLatestQuilt().getVersionName();
             case "quilt-snapshot":
